@@ -12,6 +12,11 @@ export const TOPIC_COLORS: Record<Topic, string> = {
   disaster: "#ff5a7a",
 };
 
+/** Stories that match no topic stay in the base cyan. */
+export function topicColor(topic: Topic | null): string {
+  return topic ? TOPIC_COLORS[topic] : CYAN;
+}
+
 export const TOPIC_LABELS: Record<Topic, string> = {
   conflict: "Conflict",
   economy: "Economy",
