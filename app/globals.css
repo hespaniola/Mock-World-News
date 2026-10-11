@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@theme {
+  --color-hud: #5ce1ff;
+  --color-hud-dim: rgba(92, 225, 255, 0.35);
+  --color-hud-faint: rgba(92, 225, 255, 0.12);
+  --color-void: #01060b;
+  --color-conflict: #ffb020;
+  --color-economy: #4dff9a;
+  --color-politics: #b48cff;
+  --color-disaster: #ff5a7a;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--color-void);
+  color: var(--color-hud);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Static backdrop: deep radial falloff plus a faint scanline texture. */
+.backdrop {
+  background:
+    radial-gradient(ellipse at 50% 50%, rgba(14, 60, 80, 0.45) 0%, rgba(2, 12, 20, 0.9) 45%, #01060b 75%),
+    #01060b;
+}
+.scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(92, 225, 255, 0.025) 0px,
+    rgba(92, 225, 255, 0.025) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+.vignette {
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.65) 100%);
+}
