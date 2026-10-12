@@ -18,6 +18,11 @@ export type Hotspot = {
   lng: number;
   /** FIPS 10-4 country code as used by GDELT. */
   countryCode: string;
+  /** GDELT ADM1 (state/province) code, e.g. "UP07", or "" if unknown. */
+  adm1Code: string;
+  /** world-atlas country id and name, when the place falls inside a mapped country. */
+  countryId: string | null;
+  countryName: string | null;
   /** Number of distinct articles in the window that are primarily about this place. */
   count: number;
   /** Dominant topic, or null when no topic stands out. */

@@ -6,6 +6,8 @@ import {
   AdditiveBlending,
   Color,
   Group,
+  LineBasicMaterial,
+  type LineSegments,
   MeshBasicMaterial,
   MeshPhongMaterial,
   Sprite,
@@ -18,6 +20,9 @@ import { CYAN, topicColor, withAlpha } from "@/lib/theme";
 import type { NewsSnapshot } from "@/lib/news/types";
 import { clusterHotspots, clusterRadiusForAltitude, type Cluster } from "@/lib/news/cluster";
 import { dotMaterial, getHaloTexture, labelSprite } from "./sprites";
+import { buildLines } from "./lines";
+import { provinceRings, type Boundaries, type Province } from "@/lib/geo/boundaries";
+import type { Area } from "@/lib/news/area";
 
 const AUTO_ROTATE_SPEED = 0.35;
 const RESUME_ROTATE_AFTER_MS = 6000;
@@ -29,6 +34,10 @@ const GLOW_FADE_TO = 0.6;
 /** Pulse rings only on the biggest clusters, to keep the frame budget. */
 const MAX_RINGS = 60;
 const GLOBE_RADIUS = 100;
+/** Camera altitude when focused on a single place vs. a cluster of places. */
+const FOCUS_ALTITUDE_PLACE = 0.55;
+const FOCUS_ALTITUDE_AREA = 0.9;
+const FLY_MS = 1200;
 
 type GraticuleLine = { coords: [number, number][] };
 
@@ -60,6 +69,11 @@ function usePrefersReducedMotion() {
   return reduced;
 }
 
+/** State/province borders fade in as the camera comes closer. */
+function provinceOpacity(altitude: number): number {
+  return 0.05 + 0.35 * (1 - glowFade(altitude + 0.2));
+}
+
 function glowFade(altitude: number): number {
   const t = (altitude - GLOW_FADE_TO) / (GLOW_FADE_FROM - GLOW_FADE_TO);
   const c = Math.max(0, Math.min(1, t));
@@ -82,19 +96,39 @@ function clusterBucket(altitude: number): number {
   return r === 0 ? 0 : Math.round(Math.log(r) / Math.log(1.3));
 }
 
+/**
+ * Dot-matrix brightness steps down as the camera closes in, so borders and
+ * the selected province read clearly. Stepped (not continuous) so the hex
+ * layer only recolours at three thresholds.
+ */
+function landTier(altitude: number): number {
+  return altitude > 1.4 ? 1 : altitude > 0.8 ? 0.55 : 0.3;
+}
+
 function radiusForBucket(bucket: number): number {
   return bucket === 0 ? 0 : Math.pow(1.3, bucket);
 }
 
 type Halo = { id: string; lat: number; lng: number; size: number };
 
-export default function GlobeView({ snapshot }: { snapshot: NewsSnapshot | null }) {
+type Props = {
+  snapshot: NewsSnapshot | null;
+  selected: Area | null;
+  onSelect: (cluster: Cluster) => void;
+  boundaries: Boundaries | null;
+  /** Province of the selected place, outlined brightly. */
+  province: Province | null;
+};
+
+export default function GlobeView({ snapshot, selected, onSelect, boundaries, province }: Props) {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const reducedMotion = usePrefersReducedMotion();
   const altitudeRef = useRef(DEFAULT_ALTITUDE);
   const [bucket, setBucket] = useState(() => clusterBucket(DEFAULT_ALTITUDE));
+  const [ready, setReady] = useState(false);
+  const [land, setLand] = useState(() => landTier(DEFAULT_ALTITUDE));
 
   const countries = useMemo(() => getCountries(), []);
   const graticule = useMemo(() => buildGraticule(), []);
@@ -177,9 +211,9 @@ export default function GlobeView({ snapshot }: { snapshot: NewsSnapshot | null 
   const hexColor = useCallback(
     (f: object) => {
       const i = intensity.get(String((f as CountryFeature).id)) ?? 0;
-      return withAlpha(CYAN, 0.6 + 0.25 * i);
+      return withAlpha(CYAN, (0.6 + 0.25 * i) * land);
     },
-    [intensity],
+    [intensity, land],
   );
 
   // ---- Layer 2: city / region dots --------------------------------------
@@ -229,6 +263,8 @@ export default function GlobeView({ snapshot }: { snapshot: NewsSnapshot | null 
     }
     mat.opacity = (intensity.get(h.id) ?? 0) * 0.8 * glowFade(altitudeRef.current);
     const s = new Sprite(mat);
+    // Halos are pure light; clicks should reach the dots beneath them.
+    s.raycast = () => {};
     s.scale.setScalar(h.size);
     return s;
   }, [intensity]);
@@ -239,16 +275,101 @@ export default function GlobeView({ snapshot }: { snapshot: NewsSnapshot | null 
     if (p) obj.position.set(p.x, p.y, p.z);
   }, []);
 
+  // ---- Borders -----------------------------------------------------------
+  // 1:50m country borders always; state/province borders fade in on zoom;
+  // the selected place's province gets a bright outline.
+  const countryMaterial = useMemo(
+    () => new LineBasicMaterial({ color: new Color(CYAN), transparent: true, opacity: 0.7, depthWrite: false }),
+    [],
+  );
+  const provinceMaterial = useMemo(
+    () =>
+      new LineBasicMaterial({
+        color: new Color(CYAN),
+        transparent: true,
+        opacity: provinceOpacity(DEFAULT_ALTITUDE),
+        depthWrite: false,
+      }),
+    [],
+  );
+  const highlightMaterial = useMemo(
+    () => new LineBasicMaterial({ color: new Color("#ffffff"), transparent: true, opacity: 0.95, depthWrite: false }),
+    [],
+  );
+
+  useEffect(() => {
+    const globe = globeRef.current;
+    if (!ready || !globe || !boundaries) return;
+    const get = globe.getCoords.bind(globe);
+    const objs: LineSegments[] = [
+      buildLines(boundaries.countryLines.coordinates, get, 0.0045, countryMaterial),
+      buildLines(boundaries.provinceLines.coordinates, get, 0.004, provinceMaterial),
+    ];
+    for (const o of objs) globe.scene().add(o);
+    return () => {
+      for (const o of objs) {
+        globe.scene().remove(o);
+        o.geometry.dispose();
+      }
+    };
+  }, [ready, boundaries, countryMaterial, provinceMaterial]);
+
+  useEffect(() => {
+    const globe = globeRef.current;
+    if (!ready || !globe || !province) return;
+    const obj = buildLines(provinceRings(province), globe.getCoords.bind(globe), 0.005, highlightMaterial);
+    obj.renderOrder = 3;
+    globe.scene().add(obj);
+    return () => {
+      globe.scene().remove(obj);
+      obj.geometry.dispose();
+    };
+  }, [ready, province, highlightMaterial]);
+
+  // ---- Selection: fly in, pause rotation; fly back out on close -----------
+  const homeAltitude = useRef<number | null>(null);
+  const narrowRef = useRef(false);
+  const flownTo = useRef<string | null>(null);
+  useEffect(() => {
+    const globe = globeRef.current;
+    if (!ready || !globe) return;
+    const controls = globe.controls();
+    if (selected) {
+      // A data refresh hands over a new Area for the same place: don't re-fly.
+      if (flownTo.current === selected.id) return;
+      flownTo.current = selected.id;
+      homeAltitude.current ??= altitudeRef.current;
+      controls.autoRotate = false;
+      const altitude = Math.min(
+        homeAltitude.current,
+        selected.places.length > 1 ? FOCUS_ALTITUDE_AREA : FOCUS_ALTITUDE_PLACE,
+      );
+      // On phones the panel is a bottom sheet: aim below the place so it sits in the visible top half.
+      narrowRef.current = window.matchMedia("(max-width: 639px)").matches;
+      const latOffset = narrowRef.current ? altitude * 12 : 0;
+      globe.pointOfView({ lat: Math.max(-85, selected.lat - latOffset), lng: selected.lng, altitude }, FLY_MS);
+    } else if (homeAltitude.current !== null) {
+      flownTo.current = null;
+      const { lat, lng } = globe.pointOfView();
+      globe.pointOfView({ lat, lng, altitude: homeAltitude.current }, FLY_MS);
+      homeAltitude.current = null;
+      if (!reducedMotion) setTimeout(() => (controls.autoRotate = true), FLY_MS);
+    }
+  }, [ready, selected, reducedMotion]);
+
   const onZoom = useCallback(
     ({ altitude }: { altitude: number }) => {
       altitudeRef.current = altitude;
       applyGlow();
+      provinceMaterial.opacity = provinceOpacity(altitude);
       const k = zoomScale(altitude);
       for (const g of dotGroups.current) g.scale.setScalar(k);
+      const t = landTier(altitude);
+      setLand((prev) => (prev === t ? prev : t));
       const b = clusterBucket(altitude);
       setBucket((prev) => (prev === b ? prev : b));
     },
-    [applyGlow],
+    [applyGlow, provinceMaterial],
   );
 
   // ---- Sizing and camera -------------------------------------------------
@@ -282,7 +403,9 @@ export default function GlobeView({ snapshot }: { snapshot: NewsSnapshot | null 
     const onEnd = () => {
       clearTimeout(resumeTimer);
       if (reducedMotion) return;
-      resumeTimer = setTimeout(() => (controls.autoRotate = true), RESUME_ROTATE_AFTER_MS);
+      resumeTimer = setTimeout(() => {
+        if (homeAltitude.current === null) controls.autoRotate = true;
+      }, RESUME_ROTATE_AFTER_MS);
     };
     controls.addEventListener("start", onStart);
     controls.addEventListener("end", onEnd);
@@ -302,6 +425,7 @@ export default function GlobeView({ snapshot }: { snapshot: NewsSnapshot | null 
     const aspect = el ? el.clientWidth / Math.max(el.clientHeight, 1) : 1;
     const altitude = aspect < 1 ? Math.min(DEFAULT_ALTITUDE / aspect, 4.2) * 0.85 : DEFAULT_ALTITUDE;
     globe.pointOfView({ lat: 20, lng: 10, altitude }, 0);
+    setReady(true);
   };
 
   return (
@@ -332,7 +456,8 @@ export default function GlobeView({ snapshot }: { snapshot: NewsSnapshot | null 
           polygonAltitude={0.003}
           polygonCapMaterial={(f: object) => capMaterials.get(String((f as CountryFeature).id))!}
           polygonSideMaterial={sideMaterial}
-          polygonStrokeColor={() => withAlpha(CYAN, 0.7)}
+          // Until the 1:50m borders load, the 110m outlines stand in.
+          polygonStrokeColor={() => (boundaries ? false : withAlpha(CYAN, 0.7))}
           polygonsTransitionDuration={0}
           // Graticule
           pathsData={graticule}
@@ -352,6 +477,10 @@ export default function GlobeView({ snapshot }: { snapshot: NewsSnapshot | null 
           objectAltitude={0.012}
           objectFacesSurfaces={false}
           objectThreeObject={makeDot}
+          onObjectClick={(d: object) => onSelect(d as Cluster)}
+          onObjectHover={(d: object | null) => {
+            if (containerRef.current) containerRef.current.style.cursor = d ? "pointer" : "";
+          }}
           // Pulse rings
           ringsData={rings}
           ringLat="lat"

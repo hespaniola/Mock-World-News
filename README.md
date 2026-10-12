@@ -29,13 +29,24 @@ They need no API key and have no rate limit. Only the server reads them
 - **Caching:** the snapshot is rebuilt at most every 15 minutes. Event-file
   summaries are cached forever, since GDELT never changes a published file.
 
+## Interaction
+
+Click a dot (or cluster) to fly to it and open the story panel: a plain-
+language summary built from the numbers, topic mix, a tone meter (GDELT
+tone), nearby places, and the latest headlines with links out. The selected
+place's state/province is outlined. Close (or Esc) flies back out and resumes
+rotation.
+
+Borders: 1:50m country borders, plus state/province borders (Natural Earth
+admin-1, see `public/geo/README.md`) that fade in as you zoom.
+
 `GDELT_BASE_URL` can point the server at a local mirror for offline testing.
 
 ## Build progress
 
 1. [x] Styled globe and overall look
 2. [x] Country glow + city/region dots, on live GDELT data
-3. [ ] Click interaction and story panel
+3. [x] Click interaction and story panel (+ state/province borders)
 4. [ ] Globe details (terminator, pings, arcs, reticle, ISS)
 5. [ ] HUD
 6. [ ] Polish (boot sequence, search, sounds, reduced motion, mobile)

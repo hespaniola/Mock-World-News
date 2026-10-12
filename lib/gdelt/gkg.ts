@@ -24,6 +24,8 @@ export type GkgLocation = {
   type: number;
   name: string;
   countryCode: string;
+  /** GDELT ADM1 code, e.g. "UP07"; matches Natural Earth `fips` outside the US. */
+  adm1Code: string;
   lat: number;
   lng: number;
   featureId: string;
@@ -54,6 +56,7 @@ function parseLocations(field: string): GkgLocation[] {
       type: Number(p[0]),
       name: p[1],
       countryCode: p[2],
+      adm1Code: p[3],
       lat,
       lng,
       featureId: p[7],

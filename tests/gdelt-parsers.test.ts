@@ -30,6 +30,7 @@ test("GKG: picks first-mentioned city, decodes title, reads tone and topic", () 
   assert.equal(a.title, "A & B's headline");
   assert.equal(a.primary?.name, "Kyiv, Kyyiv, Misto, Ukraine");
   assert.equal(a.primary?.lat, 50.4333);
+  assert.equal(a.primary?.adm1Code, "UP12");
   assert.equal(a.tone, -3.5);
   assert.equal(a.topic, "conflict");
   assert.equal(a.seenAt.toISOString(), "2026-10-11T22:00:00.000Z");

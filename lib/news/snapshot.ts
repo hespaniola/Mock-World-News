@@ -61,6 +61,11 @@ function resolveCountry(fips: string, point: [number, number] | undefined): stri
   return id;
 }
 
+let names: Map<string, string> | null = null;
+function countryNames(): Map<string, string> {
+  return (names ??= new Map(getCountries().map((f) => [String(f.id), f.properties.name])));
+}
+
 function buildSpikes(current: CountryCounts[], baseline: CountryCounts[]): CountrySpike[] {
   const cur: Record<string, number> = {};
   const base: Record<string, number> = {};
@@ -93,7 +98,7 @@ function buildSpikes(current: CountryCounts[], baseline: CountryCounts[]): Count
   // Compare shares, not raw counts, so a globally busy news day doesn't
   // light up every country at once.
   const scale = curTotal / baseTotal;
-  const names = new Map(getCountries().map((f) => [String(f.id), f.properties.name]));
+  const names = countryNames();
   const out: CountrySpike[] = [];
   for (const [id, { current, baseline }] of byId) {
     const expected = baseline * scale;
@@ -127,6 +132,7 @@ function buildHotspots(articles: GkgArticle[]): { hotspots: Hotspot[]; total: nu
   const hotspots: Hotspot[] = [];
   for (const [key, list] of groups) {
     const p = list[0].primary!;
+    const countryId = resolveCountry(p.countryCode, [p.lat, p.lng]);
     const topicCounts: Partial<Record<Topic, number>> = {};
     let toneSum = 0;
     for (const a of list) {
@@ -150,6 +156,9 @@ function buildHotspots(articles: GkgArticle[]): { hotspots: Hotspot[]; total: nu
       lat: p.lat,
       lng: p.lng,
       countryCode: p.countryCode,
+      adm1Code: p.adm1Code,
+      countryId,
+      countryName: countryId ? (countryNames().get(countryId) ?? null) : null,
       count: list.length,
       topic,
       topicCounts,
