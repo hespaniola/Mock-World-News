@@ -1,11 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { NewsSnapshot } from "@/lib/news/types";
+import type { ComponentProps } from "react";
+import type GlobeViewType from "./GlobeView";
 
 // three.js needs `window`; keep the globe client-only.
 const GlobeView = dynamic(() => import("./GlobeView"), { ssr: false });
 
-export default function GlobeStage({ snapshot }: { snapshot: NewsSnapshot | null }) {
-  return <GlobeView snapshot={snapshot} />;
+export default function GlobeStage(props: ComponentProps<typeof GlobeViewType>) {
+  return <GlobeView {...props} />;
 }

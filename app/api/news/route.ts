@@ -4,7 +4,7 @@ import { buildSnapshot } from "@/lib/news/snapshot";
 // GDELT publishes every 15 minutes, so the snapshot is rebuilt at most that
 // often and shared by every visitor; nobody's browser talks to GDELT.
 // Failures throw and are therefore never cached.
-const cachedSnapshot = unstable_cache(buildSnapshot, ["news-snapshot-v1"], { revalidate: 900 });
+const cachedSnapshot = unstable_cache(buildSnapshot, ["news-snapshot-v2"], { revalidate: 900 });
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

@@ -4,7 +4,7 @@ import { clusterHotspots, angularDistance } from "../lib/news/cluster";
 import type { Hotspot } from "../lib/news/types";
 
 const h = (id: string, lat: number, lng: number, count: number, topic: Hotspot["topic"] = null): Hotspot => ({
-  id, name: id, lat, lng, countryCode: "XX", count, topic,
+  id, name: id, lat, lng, countryCode: "XX", adm1Code: "", countryId: null, countryName: null, count, topic,
   topicCounts: topic ? { [topic]: count } : {}, tone: 0, articles: [],
 });
 
